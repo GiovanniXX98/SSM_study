@@ -1,0 +1,26 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Checkpoints and models
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+
+# Data and training outputs
+data/
+*.log
+*.csv
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# OS generated files
+.DS_Store
+Thumbs.db
