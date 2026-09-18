@@ -4,7 +4,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-> **Research Repository**: Investigating wave-theoretic dynamics and Fourier spectral modulation to build next-generation, competitive **State Space Models (SSMs)** that surpass standard Transformers and alternative recurrent architectures.
+> **Research Repository**: Investigating wave-theoretic dynamics and Fourier spectral modulation to build  **State Space Models (SSMs)** as alternative recurrent architectures.
 
 ---
 
