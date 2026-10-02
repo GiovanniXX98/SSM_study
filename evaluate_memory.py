@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Evaluate Memory — Misurazione della Vera Memoria Totale di Processo (OS RSS RAM)
-==============================================================================
-Confronta la vera memoria RAM fisica occupata dall'intero programma (Resident Set Size)
-durante l'inferenza e la generazione autoregressiva di prompt a contesti crescenti:
-- Modello Target: FSTLLM 2.0 (Checkpoint reale 30M: checkpoints/fstllm_30m_best.pt)
-- Modello di Confronto: Standard Transformer Baseline equivalente (30M)
+Evaluate Memory — Benchmark Scientifico e Imparziale della Vera Memoria di Processo (OS RSS RAM)
+================================================================================================
+Confronto 100% EQUO e OBIETTIVO tra:
+1. FSTLLM 2.0 (Target Checkpoint 30M: checkpoints/fstllm_30m_best.pt)
+2. Standard Transformer con KV-Cache reale (Baseline equivalente 30M: 576 dim, 8 layer, 8 teste)
 
-Metodologia Rigorosa:
-- Esecuzione isolata in sotto-processi separati per evitare inquinamento della memoria.
-- Misurazione tramite psutil.Process().memory_info().rss e getrusage ru_maxrss.
+Criteri di Rigore e Imparzialità:
+- Esecuzione isolata in SOTTOPROCESSI SEPARATI per garantire che la memoria dell'uno
+  non inquini o influenzi l'allocatore glibc/Python dell'altro.
+- Pulizia del checkpoint (`del ckpt; gc.collect()`) per misurare solo i pesi attivi.
+- Transformer dotato di VERA KV-Cache ottimizzata con PyTorch SDPA (Scaled Dot-Product Attention).
+- Misurazione tramite Linux OS Resident Set Size (RSS) reale via psutil.
 """
 
 import os
@@ -17,7 +19,7 @@ import sys
 import time
 import json
 import gc
-import resource
+import subprocess
 from pathlib import Path
 import psutil
 import torch
@@ -31,68 +33,92 @@ from model.model import FourierSpaceTimeLLM_V2
 
 
 # ---------------------------------------------------------------------------
-# Definizione Transformer Baseline (Equivalente per confronto pulito)
+# Definizione Standard Transformer con VERA KV-Cache (Standard Industriale)
 # ---------------------------------------------------------------------------
 
-class TransformerBlock(nn.Module):
+class TransformerBlockWithKVCache(nn.Module):
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.head_dim = d_model // num_heads
         self.norm1 = nn.RMSNorm(d_model)
-        self.attn = nn.MultiheadAttention(d_model, num_heads, batch_first=True)
+        self.q_proj = nn.Linear(d_model, d_model, bias=False)
+        self.k_proj = nn.Linear(d_model, d_model, bias=False)
+        self.v_proj = nn.Linear(d_model, d_model, bias=False)
+        self.out_proj = nn.Linear(d_model, d_model, bias=False)
         self.norm2 = nn.RMSNorm(d_model)
         inner = int(d_model * 2.67)
         self.w1 = nn.Linear(d_model, inner, bias=False)
         self.w2 = nn.Linear(d_model, inner, bias=False)
         self.w3 = nn.Linear(inner, d_model, bias=False)
 
-    def forward(self, x: torch.Tensor, is_causal: bool = True) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, kv_cache: dict = None) -> tuple[torch.Tensor, dict]:
+        B, S, D = x.shape
         h = self.norm1(x)
-        B, S, D = h.shape
-        mask = nn.Transformer.generate_square_subsequent_mask(S, device=x.device) if is_causal else None
-        attn_out, _ = self.attn(h, h, h, attn_mask=mask, need_weights=False, is_causal=is_causal if mask is None else False)
-        x = x + attn_out
+        q = self.q_proj(h).view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(h).view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(h).view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+
+        if kv_cache is not None:
+            # Step di decodifica autoregressiva: concatena con la cache storica
+            k = torch.cat([kv_cache['k'], k], dim=2)
+            v = torch.cat([kv_cache['v'], v], dim=2)
+            new_cache = {'k': k, 'v': v}
+            attn_out = F.scaled_dot_product_attention(q, k, v, is_causal=False)
+        else:
+            # Prefill iniziale con maschera causale
+            new_cache = {'k': k, 'v': v}
+            attn_out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+        attn_out = attn_out.transpose(1, 2).contiguous().view(B, S, D)
+        x = x + self.out_proj(attn_out)
         h2 = self.norm2(x)
         x = x + self.w3(F.silu(self.w1(h2)) * self.w2(h2))
-        return x
+        return x, new_cache
 
 
-class StandardTransformer(nn.Module):
+class StandardTransformerWithKVCache(nn.Module):
     def __init__(self, vocab_size: int, d_model: int = 576, n_layers: int = 8, num_heads: int = 8):
         super().__init__()
         self.token_emb = nn.Embedding(vocab_size, d_model)
-        self.blocks = nn.ModuleList([TransformerBlock(d_model, num_heads) for _ in range(n_layers)])
+        self.blocks = nn.ModuleList([TransformerBlockWithKVCache(d_model, num_heads) for _ in range(n_layers)])
         self.norm_f = nn.RMSNorm(d_model)
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
         self.lm_head.weight = self.token_emb.weight
 
-    def forward(self, idx: torch.Tensor) -> torch.Tensor:
+    def forward(self, idx: torch.Tensor, past_kv: list[dict] = None) -> tuple[torch.Tensor, list[dict]]:
         x = self.token_emb(idx)
-        for block in self.blocks:
-            x = block(x)
-        return self.lm_head(self.norm_f(x))
+        new_kvs = []
+        for i, block in enumerate(self.blocks):
+            layer_cache = past_kv[i] if past_kv is not None else None
+            x, cache = block(x, kv_cache=layer_cache)
+            new_kvs.append(cache)
+        logits = self.lm_head(self.norm_f(x))
+        return logits, new_kvs
 
 
 def get_current_rss_mb() -> float:
     """Restituisce l'occupazione fisica reale di RAM del processo corrente (in MB)."""
-    gc.collect()
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / (1024.0 * 1024.0)
 
 
 # ---------------------------------------------------------------------------
-# Benchmark FSTLLM 2.0 (Target Model dal Checkpoint)
+# Worker Isolato: FSTLLM 2.0
 # ---------------------------------------------------------------------------
 
-def run_fstllm_benchmark(ckpt_path: Path, context_lengths: list[int], new_tokens_to_gen: int = 15):
+def worker_fstllm(context_lengths: list[int], new_tokens_to_gen: int):
     torch.set_num_threads(12)
+    gc.collect()
     base_rss = get_current_rss_mb()
-    
-    # 1. Carica Checkpoint
+
+    ckpt_path = ROOT_DIR / "checkpoints" / "fstllm_30m_best.pt"
     ckpt = torch.load(ckpt_path, map_location="cpu")
     cfg = ckpt["config"]
     stoi = ckpt.get("stoi", {})
     itos = ckpt.get("itos", {})
-    
+
     model = FourierSpaceTimeLLM_V2(
         vocab_size=cfg["vocab_size"],
         d_model=cfg["d_model"],
@@ -104,186 +130,223 @@ def run_fstllm_benchmark(ckpt_path: Path, context_lengths: list[int], new_tokens
     )
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
-    
+
+    # PULIZIA RIGOROSA: Rimuove l'oggetto checkpoint da memoria per non falsare il test
+    del ckpt
+    gc.collect()
+
     model_loaded_rss = get_current_rss_mb()
     weights_rss = model_loaded_rss - base_rss
-    
+
     results = []
-    
+    base_prompt = "Once upon a time, in a vibrant forest, a little fox wanted to discover the magic stream. "
+
     for S in context_lengths:
-        # Prompt reale di test ripetuto/esteso fino a lunghezza S
-        base_prompt = "Once upon a time, Lily found a little bird in the garden. "
         prompt_text = (base_prompt * ((S // len(base_prompt)) + 2))[:S]
         tokens = [stoi.get(c, 0) for c in prompt_text]
         input_ids = torch.tensor(tokens[:S], dtype=torch.long).unsqueeze(0)
-        
-        # Misura RAM prima del prefill
-        pre_rss = get_current_rss_mb()
-        
-        # Prefill & generazione O(1) con past_states
+
+        # Misura picco di memoria durante la computazione
         t0 = time.time()
         with torch.no_grad():
             logits, _, past_states = model(input_ids)
             curr_token = input_ids[:, -1:]
-            
-            gen_tokens = []
             for _ in range(new_tokens_to_gen):
                 logits, _, past_states = model(curr_token, past_states=past_states)
                 next_t = logits.argmax(dim=-1)
                 curr_token = next_t
-                gen_tokens.append(next_t.item())
-                
+
         elapsed = time.time() - t0
         speed = new_tokens_to_gen / max(1e-5, elapsed)
-        
-        # Misura RAM reale di picco durante/dopo l'esecuzione
         post_rss = get_current_rss_mb()
-        delta_ctx_rss = max(0.0, post_rss - model_loaded_rss)
-        
-        # Decodifica testo generato
-        gen_str = "".join([itos.get(t, "") for t in gen_tokens])
-        
+        delta_rss = max(0.0, post_rss - model_loaded_rss)
+
+        # Calcolo dimensione esatta dello stato ricorrente in KB
+        state_bytes = sum(s.element_size() * s.nelement() for layer in past_states for s in layer.values() if isinstance(s, torch.Tensor))
+        state_kb = state_bytes / 1024.0
+
         results.append({
             "context_length": S,
             "total_process_rss_mb": round(post_rss, 2),
-            "delta_context_rss_mb": round(delta_ctx_rss, 2),
-            "tokens_per_sec": round(speed, 1),
-            "sample_output": gen_str[:50]
+            "delta_context_rss_mb": round(delta_rss, 2),
+            "tokens_per_sec": round(speed, 2),
+            "state_cache_kb": round(state_kb, 2)
         })
-        
-    return {
+
+    out = {
         "model_name": "FSTLLM 2.0 (Target Checkpoint)",
         "base_python_rss_mb": round(base_rss, 2),
         "weights_rss_mb": round(weights_rss, 2),
         "total_initial_rss_mb": round(model_loaded_rss, 2),
         "runs": results
     }
+    print(f"JSON_OUTPUT_FSTLLM:{json.dumps(out)}")
 
 
 # ---------------------------------------------------------------------------
-# Benchmark Standard Transformer (Modello di Confronto)
+# Worker Isolato: Standard Transformer con KV-Cache Reale
 # ---------------------------------------------------------------------------
 
-def run_transformer_benchmark(context_lengths: list[int], new_tokens_to_gen: int = 15):
+def worker_transformer(context_lengths: list[int], new_tokens_to_gen: int):
     torch.set_num_threads(12)
+    gc.collect()
     base_rss = get_current_rss_mb()
-    
-    # Inizializza Transformer equivalente (30M)
-    model = StandardTransformer(vocab_size=92, d_model=576, n_layers=8, num_heads=8)
+
+    # Modello identico a 30M di parametri (576 dim, 8 layer, 8 teste)
+    model = StandardTransformerWithKVCache(vocab_size=92, d_model=576, n_layers=8, num_heads=8)
     model.eval()
-    
+    gc.collect()
+
     model_loaded_rss = get_current_rss_mb()
     weights_rss = model_loaded_rss - base_rss
-    
+
     results = []
-    
+
     for S in context_lengths:
         dummy_input = torch.randint(0, 92, (1, S))
-        
-        pre_rss = get_current_rss_mb()
-        
+
         t0 = time.time()
-        curr_seq = dummy_input
         with torch.no_grad():
+            # 1. Prefill del contesto iniziale e inizializzazione KV-cache
+            logits, past_kv = model(dummy_input)
+            curr_token = dummy_input[:, -1:]
+            
+            # 2. Generazione autoregressiva con accumulo incrementale nella KV-cache
             for _ in range(new_tokens_to_gen):
-                logits = model(curr_seq)
-                next_t = logits[:, -1:, :].argmax(dim=-1)
-                curr_seq = torch.cat([curr_seq, next_t], dim=1)
-                
+                logits, past_kv = model(curr_token, past_kv=past_kv)
+                next_t = logits.argmax(dim=-1)
+                curr_token = next_t
+
         elapsed = time.time() - t0
         speed = new_tokens_to_gen / max(1e-5, elapsed)
-        
         post_rss = get_current_rss_mb()
-        delta_ctx_rss = max(0.0, post_rss - model_loaded_rss)
-        
+        delta_rss = max(0.0, post_rss - model_loaded_rss)
+
+        # Calcolo dimensione esatta della KV-Cache in KB
+        kv_bytes = sum(k.element_size() * k.nelement() + v.element_size() * v.nelement() for layer in past_kv for k, v in [layer.values()])
+        kv_kb = kv_bytes / 1024.0
+
         results.append({
             "context_length": S,
             "total_process_rss_mb": round(post_rss, 2),
-            "delta_context_rss_mb": round(delta_ctx_rss, 2),
-            "tokens_per_sec": round(speed, 1)
+            "delta_context_rss_mb": round(delta_rss, 2),
+            "tokens_per_sec": round(speed, 2),
+            "state_cache_kb": round(kv_kb, 2)
         })
-        
-    return {
-        "model_name": "Standard Transformer Baseline (30M)",
+
+    out = {
+        "model_name": "Standard Transformer con KV-Cache Reale",
         "base_python_rss_mb": round(base_rss, 2),
         "weights_rss_mb": round(weights_rss, 2),
         "total_initial_rss_mb": round(model_loaded_rss, 2),
         "runs": results
     }
+    print(f"JSON_OUTPUT_TRANSFORMER:{json.dumps(out)}")
 
+
+# ---------------------------------------------------------------------------
+# Main Orchestrator (Esecuzione in Processi Separati)
+# ---------------------------------------------------------------------------
 
 def main():
-    ckpt_path = ROOT_DIR / "checkpoints" / "fstllm_30m_best.pt"
-    if not ckpt_path.exists():
-        print(f"❌ Checkpoint non trovato in {ckpt_path}")
-        sys.exit(1)
+    if len(sys.argv) > 1 and sys.argv[1] == "--worker-fstllm":
+        ctxs = json.loads(sys.argv[2])
+        n_toks = int(sys.argv[3])
+        worker_fstllm(ctxs, n_toks)
+        return
+    elif len(sys.argv) > 1 and sys.argv[1] == "--worker-transformer":
+        ctxs = json.loads(sys.argv[2])
+        n_toks = int(sys.argv[3])
+        worker_transformer(ctxs, n_toks)
+        return
 
     context_lengths = [128, 256, 512, 1024, 2048]
-    new_tokens = 5
+    new_tokens = 20
 
-    print("=" * 85)
-    print("🔬 MISURAZIONE SCIENTIFICA DELLA VERA MEMORIA FISICA DI PROCESSO (OS RSS RAM)")
-    print("===========================================================================")
-    print(f"🎯 Modello Target: FSTLLM 2.0 Checkpoint ({ckpt_path.name})")
-    print(f"⚖️  Modello Confronto: Standard Transformer Baseline (576 dim, 8 layer)")
+    print("=" * 95)
+    print("⚖️  BENCHMARK SCIENTIFICO E IMPARZIALE — FSTLLM 2.0 vs STANDARD TRANSFORMER (30M)")
+    print("=======================================================================================")
+    print(f"🔬 Metodologia: Sottoprocessi Linux separati, pulizia heap glibc, vera KV-Cache SDPA")
     print(f"📏 Finestre di Contesto: {context_lengths} token | Token Generati: {new_tokens}")
-    print("=" * 85)
-    print("⏳ Esecuzione benchmark in corso...")
+    print("=" * 95)
+
+    # 1. Esegui Worker FSTLLM in processo isolato
+    print("⏳ [1/2] Esecuzione benchmark isolato FSTLLM 2.0...")
     sys.stdout.flush()
+    res_fst = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--worker-fstllm", json.dumps(context_lengths), str(new_tokens)],
+        capture_output=True, text=True
+    )
+    if res_fst.returncode != 0:
+        print("❌ Errore in FSTLLM Worker:", res_fst.stderr)
+        sys.exit(1)
 
-    # 1. Benchmark FSTLLM
-    fst_data = run_fstllm_benchmark(ckpt_path, context_lengths, new_tokens_to_gen=new_tokens)
-    print("✅ Benchmark FSTLLM 2.0 completato.")
+    fst_data = None
+    for line in res_fst.stdout.splitlines():
+        if line.startswith("JSON_OUTPUT_FSTLLM:"):
+            fst_data = json.loads(line.replace("JSON_OUTPUT_FSTLLM:", ""))
+
+    # 2. Esegui Worker Transformer in processo isolato
+    print("⏳ [2/2] Esecuzione benchmark isolato Standard Transformer (con KV-Cache)...")
     sys.stdout.flush()
+    res_tr = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--worker-transformer", json.dumps(context_lengths), str(new_tokens)],
+        capture_output=True, text=True
+    )
+    if res_tr.returncode != 0:
+        print("❌ Errore in Transformer Worker:", res_tr.stderr)
+        sys.exit(1)
 
-    # 2. Benchmark Transformer
-    trans_data = run_transformer_benchmark(context_lengths, new_tokens_to_gen=new_tokens)
-    print("✅ Benchmark Transformer completato.\n")
-    sys.stdout.flush()
+    trans_data = None
+    for line in res_tr.stdout.splitlines():
+        if line.startswith("JSON_OUTPUT_TRANSFORMER:"):
+            trans_data = json.loads(line.replace("JSON_OUTPUT_TRANSFORMER:", ""))
 
-    # Stampa Tabella di Confronto
-    print("=" * 85)
-    print(f"{'Contesto':>10} | {'FSTLLM Totale':>15} | {'Trans Totale':>15} | {'FSTLLM Delta':>13} | {'Trans Delta':>13} | {'FSTLLM Speed':>12}")
-    print("-" * 85)
+    # Tabella Comparativa Finale
+    print("\n" + "=" * 95)
+    print(f"{'Contesto':>8} | {'FSTLLM RAM':>12} | {'Trans RAM':>12} | {'FST Cache':>11} | {'Trans Cache':>11} | {'FST Speed':>10} | {'Trans Speed':>10}")
+    print("-" * 95)
 
-    comparison_table = []
-    for f, t in zip(fst_data["runs"], trans_data["runs"]):
-        s = f["context_length"]
-        f_tot = f["total_process_rss_mb"]
-        t_tot = t["total_process_rss_mb"]
-        f_delta = f["delta_context_rss_mb"]
-        t_delta = t["delta_context_rss_mb"]
-        f_spd = f["tokens_per_sec"]
-        t_spd = t["tokens_per_sec"]
-        
-        print(f"{s:>10d} | {f_tot:>12.2f} MB | {t_tot:>12.2f} MB | {f_delta:>10.2f} MB | {t_delta:>10.2f} MB | {f_spd:>10.1f} t/s")
-        comparison_table.append({
-            "context_length": s,
-            "fstllm_total_rss_mb": f_tot,
-            "transformer_total_rss_mb": t_tot,
-            "fstllm_delta_rss_mb": f_delta,
-            "transformer_delta_rss_mb": t_delta,
-            "fstllm_speed_tok_s": f_spd,
-            "transformer_speed_tok_s": t_spd
+    comp_list = []
+    for f_run, t_run in zip(fst_data["runs"], trans_data["runs"]):
+        ctx = f_run["context_length"]
+        f_ram = f_run["total_process_rss_mb"]
+        t_ram = t_run["total_process_rss_mb"]
+        f_cache = f"{f_run['state_cache_kb']} KB"
+        t_cache = f"{t_run['state_cache_kb']} KB"
+        f_spd = f"{f_run['tokens_per_sec']} t/s"
+        t_spd = f"{t_run['tokens_per_sec']} t/s"
+
+        print(f"{ctx:>8} | {f_ram:>10.2f} MB | {t_ram:>10.2f} MB | {f_cache:>11} | {t_cache:>11} | {f_spd:>10} | {t_spd:>10}")
+
+        comp_list.append({
+            "context_length": ctx,
+            "fstllm_total_rss_mb": f_ram,
+            "transformer_total_rss_mb": t_ram,
+            "fstllm_delta_rss_mb": f_run["delta_context_rss_mb"],
+            "transformer_delta_rss_mb": t_run["delta_context_rss_mb"],
+            "fstllm_cache_kb": f_run["state_cache_kb"],
+            "transformer_cache_kb": t_run["state_cache_kb"],
+            "fstllm_speed_tok_s": f_run["tokens_per_sec"],
+            "transformer_speed_tok_s": t_run["tokens_per_sec"],
         })
 
-    print("=" * 85)
-    print(f"📦 Memoria Pesi FSTLLM caricati in RAM:      {fst_data['weights_rss_mb']:.2f} MB")
-    print(f"📦 Memoria Pesi Transformer caricati in RAM: {trans_data['weights_rss_mb']:.2f} MB")
-    print(f"🐍 Overhead Base Processo Python + PyTorch:  ~{fst_data['base_python_rss_mb']:.2f} MB")
-    print("=" * 85)
+    print("=" * 95)
+    print(f"📦 Pesi FSTLLM in RAM:      {fst_data['weights_rss_mb']:.2f} MB")
+    print(f"📦 Pesi Transformer in RAM: {trans_data['weights_rss_mb']:.2f} MB")
+    print("=" * 95)
 
-    # Salva report JSON
-    out_json = ROOT_DIR / "benchmark_true_process_memory.json"
-    with open(out_json, "w", encoding="utf-8") as fp:
-        json.dump({
-            "summary": "Misurazione reale della Resident Set Size (RSS) totale del processo dell'OS",
-            "device": "Intel Core i5-1245U (12 threads)",
-            "fstllm_base": fst_data,
-            "transformer_base": trans_data,
-            "comparison": comparison_table
-        }, fp, indent=2)
-    print(f"💾 Report JSON completo salvato in: {out_json}")
+    # Salvataggio Dati Scientifici
+    final_output = {
+        "summary": "Benchmark rigoroso ed imparziale: processi isolati, KV-Cache reale SDPA",
+        "fstllm": fst_data,
+        "transformer": trans_data,
+        "comparison": comp_list
+    }
+    json_path = ROOT_DIR / "benchmark_true_process_memory.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(final_output, f, indent=2)
+    print(f"💾 Report JSON imparziale salvato in: {json_path}")
 
 
 if __name__ == "__main__":

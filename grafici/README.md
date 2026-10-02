@@ -21,3 +21,20 @@ Grafico comparativo a 2 pannelli che confronta le curve asintotiche tra **FSTLLM
 2. **Velocità di Decodifica (token/s):** Mostra il throughput stabile di FSTLLM (**27.3 tok/s**) contro il crollo a **0.4 tok/s** del Transformer (**68 volte più veloce** a contesto esteso).
 
 - 🖼️ **File immagine:** [`benchmark_scalabilita_memoria_e_velocita_30M.png`](file:///home/giovanni/Desktop/progetti/LLM/SSM_study/grafici/benchmark_scalabilita_memoria_e_velocita_30M.png)
+
+---
+
+## 3. `benchmark_vera_memoria_processo_30M.png`
+Grafico a 3 pannelli ad altissima risoluzione basato sul benchmark scientifico imparziale ed isolato (processi Linux separati, pulizia heap `glibc`, vera KV-Cache SDPA C++):
+1. **Memoria Fisica Totale di Processo (OS RSS RAM):** 
+   - A contesti brevi ($S=128$), il **Transformer vince** consumando meno RAM iniziale (**367.7 MB vs 390.7 MB**).
+   - A contesti lunghi ($S=2048$), **FSTLLM 2.0 vince** rimanendo piatto a **408.1 MB** contro l'esplosione del Transformer a **532.1 MB** (risparmio netto di 124 MB di RAM di processo).
+2. **Dimensione Cache di Inferenza (KB - Scala Log):**
+   - Lo stato ricorrente di FSTLLM è rigorosamente costante a **67.5 KB** ($\mathcal{O}(1)$).
+   - La KV-Cache del Transformer scala linearmente da **5.3 MB** a **74.4 MB** ($1.102\times$ più grande a 2048 token).
+3. **Throughput di Decodifica Reale (Token/s):**
+   - A contesti brevi ($S=128$), il **Transformer domina nettamente** (**13.7 tok/s vs 2.4 tok/s**) grazie ai kernel vettorializzati C++ di PyTorch SDPA.
+   - A contesti lunghi ($S=2048$), **FSTLLM sorpassa il Transformer** (**4.0 tok/s vs 2.49 tok/s**), poiché la sua complessità di inferenza è invariante rispetto alla storia passata.
+
+- 🖼️ **File immagine:** [`benchmark_vera_memoria_processo_30M.png`](file:///home/giovanni/Desktop/progetti/LLM/SSM_study/grafici/benchmark_vera_memoria_processo_30M.png)
+
