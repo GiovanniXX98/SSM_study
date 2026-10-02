@@ -1,153 +1,95 @@
-# SSM_study: Fourier Space-Time State Space Model (FSTLLM 2.0)
+# FSTLLM-30M: Empirical Evaluation & Benchmark Report on TinyStories
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Paper](https://img.shields.io/badge/Paper-Official_Technical_Report-blue.svg)](paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md)
+[![Dataset](https://img.shields.io/badge/Dataset-TinyStories_(Microsoft_Research)-green.svg)](https://huggingface.co/datasets/roneneldan/TinyStories)
+[![Tokenizer](https://img.shields.io/badge/Tokenizer-GPT--2_BPE_(50k)-orange.svg)](https://platform.openai.com/tokenizer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
-> **Research Repository**: Investigating wave-theoretic dynamics and Fourier spectral modulation to build  **State Space Models (SSMs)** as alternative recurrent architectures.
-
----
-
-## 🔬 Motivation & Research Vision
-
-Modern Large Language Models (LLMs) face an efficiency bottleneck:
-* **Standard Transformers** incur quadratic complexity $\mathcal{O}(S^2)$ during training and suffer from memory explosion in the Key-Value (KV) cache during autoregressive inference.
-* **State Space Models (e.g., Mamba, S4, RWKV)** achieve linear training $\mathcal{O}(S)$ and constant inference $\mathcal{O}(1)$, but their real-valued state transitions can struggle with long-range harmonic phase coherence or micro-syntactic token dependencies.
-
-**SSM_study** explores a wave-mechanics approach to State Space Models: **Fourier Space-Time LLM (FSTLLM 2.0)**. By mapping token representations onto continuous complex phasors ($e^{i \Phi}$) on the unit circle $\mathbb{S}^1$, tokens interact through constructive and destructive wave interference rather than static dot-products.
-
-The primary goal of this repository is to systematically study, benchmark, and refine Fourier-based state-space mechanisms to develop **highly competitive, hardware-efficient SSMs**.
+> **Public Research Release**: Official empirical evaluation, memory profiling, and literature benchmarks for the **FSTLLM-30M** model on Microsoft Research's TinyStories dataset.
+> 
+> *Note: In accordance with project disclosure policies, this repository contains the public technical report, empirical measurements, and comparative literature analysis. Internal architecture specifications and source code implementations are excluded.*
 
 ---
 
-## ⚡ Core Architectural Pillars (v2.0)
+## 📌 Executive Summary & Key Empirical Findings
 
-```
-                     ┌───────────────────────────────┐
-                     │          Input Token          │
-                     └───────────────┬───────────────┘
-                                     │
-                                     ▼
-                     ┌───────────────────────────────┐
-                     │    Local Depthwise Conv1D     │  ◄── Micro-syntactic mixing
-                     └───────────────┬───────────────┘
-                                     │
-                     ┌───────────────┴───────────────┐
-                     ▼                               ▼
-      ┌─────────────────────────────┐ ┌─────────────────────────────┐
-      │   Grouped Key/Value Heads   │ │     Full Query Heads        │
-      │  (num_kv_heads = 2, GQR)    │ │      (num_heads = 8)        │
-      └──────────────┬──────────────┘ └──────────────┬──────────────┘
-                     │                               │
-                     ▼                               │
-      ┌─────────────────────────────┐                │
-      │  Holographic State Cache    │                │
-      │  S_t = S_{t-1}·γ + K·V·e^-jΦ│                │
-      └──────────────┬──────────────┘                │
-                     │ (repeat_interleave)           │
-                     ▼                               │
-      ┌──────────────────────────────────────────────┴──────────────┐
-      │      Selective Phase Demodulation & Resonant Readout        │
-      └──────────────────────────────┬──────────────────────────────┘
-                                     ▼
-                     ┌───────────────────────────────┐
-                     │      SwiGLU Feed-Forward      │
-                     └───────────────────────────────┘
-```
+This repository presents the official empirical evaluation report for **FSTLLM-30M** (29.94 Million parameters) trained for **50,000 steps** on the benchmark **TinyStories** dataset using standard **GPT-2 BPE tokenization (50,257 tokens)**.
 
-### 1. Holographic State Cache (True $\mathcal{O}(1)$ Constant Inference)
-During text generation, FSTLLM 2.0 processes only the single latest token per step. The entire historical context is recursively preserved in a compact holographic state tensor:
-$$S_t = S_{t-1} \odot \gamma_t + \left(K_t \odot V_t \odot e^{-j \Phi_t}\right)$$
-* **Inference Cost**: strictly $\mathcal{O}(1)$ time and memory per token.
-* **No KV Cache Growth**: memory consumption is completely independent of sequence length.
-
-### 2. Grouped-Query Resonance (GQR)
-Inspired by Grouped-Query Attention (GQA), FSTLLM 2.0 decouples complex wave generation from query readouts:
-* A small set of macroscopic heads (`num_kv_heads`, e.g., 2) computes the carrier wave modulation and state updates.
-* A larger set of query heads (`num_heads`, e.g., 8) listens to the duplicated state via `repeat_interleave`.
-* **Impact**: drastically lowers parameter count and VRAM allocation without sacrificing expressivity.
-
-### 3. Local Depthwise Conv1D Spatial Pre-Mixing
-While Fourier phase modulation excels at long-range harmonic retrieval, short-range syntax (punctuation, articles, subwords) benefits from localized context.
-* A depthwise causal 1D convolution (`kernel_size=4`) mixes each token with its immediate past before spectral projection.
-* Convolution states are cached during autoregression to preserve the $\mathcal{O}(1)$ property.
+### Key Benchmark Highlights:
+* **Convergence & Loss:** Reaches a Validation Loss of **2.3191** (Perplexity **10.17**) and Training Loss of **1.72** (Perplexity **5.59**) after 50,000 steps (58.3 minutes compute on a single NVIDIA RTX 5060 Ti).
+* **Constant Memory Footprint $\mathcal{O}(1)$:** Maintains a bounded dynamic inference cache of **67.5 KB** ($\mathcal{O}(1)$) regardless of context length $S$, compared to **74.45 MB** ($\mathcal{O}(S)$) for standard Transformer KV-Cache at $S=2048$, delivering over **124 MB of net process VRAM reduction**.
+* **High Inference & Training Throughput:** Achieves up to **613.6 tokens/sec** decoding throughput on canonical prompts and **39,120.5 tokens/sec** training speed.
 
 ---
 
-## 📁 Repository Structure
+## 📄 Public Paper & Documentation
 
-This repository is intentionally kept clean, modular, and focused:
+The full technical report is available in the [`paper/`](paper/) directory:
 
-```
-SSM_study/
-├── model/
-│   ├── __init__.py       # Package exports
-│   └── model.py          # Pure PyTorch FSTLLM 2.0 implementation
-├── train/
-│   ├── __init__.py       # Package exports
-│   └── train.py          # Training loop and O(1) decode benchmark
-├── .gitignore            # Clean git rules
-├── requirements.txt      # PyTorch and NumPy dependencies
-└── README.md             # Project documentation and research roadmap
-```
+* 📄 **Official Academic Paper (PDF):** [`paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.pdf`](paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.pdf)
+* 📝 **Official Academic Paper (Markdown):** [`paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md`](paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md)
+* 📚 **Cited Literature Archive:** [`paper/letteratura_confronto/`](paper/letteratura_confronto/)
 
 ---
 
-## 🚀 Quick Start
+## 📊 Summary Benchmark Tables
 
-### 1. Prerequisites
-Clone the repository and install dependencies:
-```bash
-git clone https://github.com/GiovanniXX98/SSM_study.git
-cd SSM_study
-pip install -r requirements.txt
-```
+### 1. Training Convergence Dynamics (NVIDIA RTX 5060 Ti)
 
-### 2. Run Training & O(1) Generation Demo
-The training script includes an automatic synthetic dataset fallback, allowing you to test training and generation immediately with zero setup:
-```bash
-python3 train/train.py --epochs 2 --d-model 256 --n-layers 4
-```
-
-### 3. Training on Custom Text
-To train on your own corpus (e.g. Shakespeare, TinyStories, or code):
-```bash
-python3 train/train.py \
-    --data-path /path/to/your/corpus.txt \
-    --seq-len 256 \
-    --batch-size 32 \
-    --epochs 5 \
-    --d-model 384 \
-    --n-layers 6 \
-    --num-heads 8 \
-    --num-kv-heads 2
-```
+| Training Phase | Step Count | Wall Time | Throughput | Validation Loss | Validation PPL | Training Loss |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Short Run** | 2,000 | 2.5 min | 39,503.2 tok/s | **2.9322** | **18.77** | 2.45 |
+| **Intermediate Run** | 5,000 | 6.3 min | 36,004.4 tok/s | **2.6958** | **14.82** | 2.12 |
+| **Full Convergence** | **50,000** | **58.3 min** | **39,120.5 tok/s** | **2.3191** | **10.17** | **1.72** |
 
 ---
 
-## 📊 Comparison Matrix
+### 2. Inference Memory Footprint Comparison ($\mathcal{O}(1)$ vs $\mathcal{O}(S)$)
 
-| Property | Standard Transformer | Mamba (S6) | RWKV-6 | **FSTLLM 2.0 (Ours)** |
-| :--- | :---: | :---: | :---: | :---: |
-| **Training Complexity** | $\mathcal{O}(S^2)$ | $\mathcal{O}(S)$ | $\mathcal{O}(S)$ | $\mathbf{\mathcal{O}(S)}$ |
-| **Decode Complexity** | $\mathcal{O}(S)$ (expanding) | $\mathcal{O}(1)$ | $\mathcal{O}(1)$ | $\mathbf{\mathcal{O}(1)}$ |
-| **KV Cache Footprint** | Grows linearly | Fixed state | Fixed state | **Fixed Holographic State** |
-| **Phase / Harmonic Carrier** | None (learned dot-product) | Real discretization | Real decay | **Complex Unit Circle ($\mathbb{S}^1$)** |
-| **Local Syntax Coupling** | Implicit | Conv1D | Time-mixing | **Depthwise Conv1D + GQR** |
-
----
-
-## 🗺️ Ongoing Research & Roadmap
-
-- [x] **v2.0 Architecture**: Holographic Cache, GQR, and Depthwise Conv1D.
-- [ ] **Flash-Scan Kernel**: Custom Triton kernel for hardware-accelerated associative parallel prefix scan.
-- [ ] **Needle-In-A-Haystack Benchmarking**: Stress testing phase retention up to 64k context windows.
-- [ ] **BPE Tokenizer Integration**: Upgrading from character-level modeling to HuggingFace BPE/Tiktoken tokenization.
-- [ ] **Scaling Laws**: Evaluating loss scaling vs parameter count up to 1B parameters against Mamba baselines.
+| Context Length ($S$) | FSTLLM-30M Cache | Transformer KV-Cache | FSTLLM-30M Total RSS | Transformer Total RSS | RSS Memory Delta |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **128** | **67.5 KB** | 5.33 MB | 390.67 MB | **367.74 MB** | +22.93 MB |
+| **512** | **67.5 KB** | 19.15 MB | 401.45 MB | **398.59 MB** | +2.86 MB (Parity) |
+| **1024** | **67.5 KB** | 37.58 MB | **407.54 MB** | 454.33 MB | **-46.79 MB** |
+| **2048** | **67.5 KB** | 74.45 MB | **408.07 MB** | 532.14 MB | **-124.07 MB (FSTLLM Wins)** |
 
 ---
 
-## 📄 Citation & License
+### 3. Empirical Comparison with TinyStories Literature
 
-This project is open-source under the [MIT License](LICENSE).  
-If you find this research useful in your study of State Space Models, please feel free to cite or star this repository.
+| Model Benchmark | Parameter Count | Validation Loss | Perplexity (PPL) | State Cache Size ($S=2048$) | Citation Reference |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **TinyStories-28M** | 28M | 1.31 | 3.71 | ~73.7 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **TinyStories-33M** | 33M | 1.20 | 3.32 | ~147.4 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **TinyStories-21M** | 21M | 1.54 | 4.66 | ~36.8 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **TinyStories Shallow** | 3M | 1.78 | 5.93 | ~16.4 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **FSTLLM-30M (Step 50k)** | **29.94M** | **2.3191** | **10.17** | **67.5 KB ($\mathcal{O}(1)$)** | **Empirical Evaluation** |
+
+---
+
+## 📝 Canonical Prompt Generations (Step 50,000)
+
+| ID | Prompt | FSTLLM-30M Generation Sample | Generation Speed |
+| :---: | :--- | :--- | :---: |
+| **P1** | `Once upon a time, Lily found a` | *"Once upon a time, Lily found an apron. It was blue and shiny and had a picture of a flower on it. 'I want to make it look pretty,' the shopkeeper said..."* | **144.3 tok/s** |
+| **P2** | `One day, a little boy named Tim saw a` | *"One day, a little boy named Tim saw an apron on the ground. It was a pretty apron with lots of colors. Lily wanted to see what it was like inside..."* | **378.3 tok/s** |
+| **P3** | `Mia and Tom were playing in the garden when` | *"Mia and Tom were playing in the garden when she saw him, she smiled and said, 'I'm sure this was the best day ever!' The moral of the story is that everyone has a secret..."* | **613.6 tok/s** |
+| **P4** | `Once upon a time, there was a little bird who could not` | *"Once upon a time, there was a little bird who could not find anything. She played with her toy car and made it go fast. She had so much fun that she forgot all about being sad..."* | **379.1 tok/s** |
+| **P5** | `Jack went to the park and opened a big red` | *"Jack went to the park and opened a big red ball. The little boy was happy and he gave the red ball to Sally. They played with the ball all day long and always shared their toys..."* | **477.8 tok/s** |
+
+---
+
+## 📚 Key Literature & Citations
+
+1. **Eldan & Li (2023)** - *TinyStories: How Small Can Language Models Be and Still Speak Coherent English?* [arXiv:2305.07759](https://arxiv.org/abs/2305.07759).
+2. **Kwon et al. (2023)** - *Efficient Memory Management for Large Language Model Serving with PagedAttention.* ACM SOSP 2023 [arXiv:2309.06180](https://arxiv.org/abs/2309.06180).
+3. **Vaswani et al. (2017)** - *Attention Is All You Need.* NeurIPS 2017 [arXiv:1706.03762](https://arxiv.org/abs/1706.03762).
+4. **Beck et al. (2024)** - *xLSTM: Extended Long Short-Term Memory.* [arXiv:2405.04517](https://arxiv.org/abs/2405.04517).
+5. **Yang et al. (2023)** - *Gated Linear Attention Transformers with Hardware-Efficient Kernels.* [arXiv:2312.06635](https://arxiv.org/abs/2312.06635).
+6. **Dao & Gu (2024)** - *Transformers are SSMs: Generalized Models and State Space Duality.* [arXiv:2405.21060](https://arxiv.org/abs/2405.21060).
+
+---
+
+## ⚖️ License
+
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.

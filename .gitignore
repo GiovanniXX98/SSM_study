@@ -1,26 +1,20 @@
-# Byte-compiled / optimized files
-__pycache__/
-*.py[cod]
-*$py.class
+# Obscure everything by default (code, scripts, models, datasets, checkpoints, logs, internal drafts)
+*
 
-# Checkpoints and models
-*.pt
-*.pth
-*.bin
-*.safetensors
-checkpoints/
+# Allow directories to be scanned so paper/ can be whitelisted
+!*/
 
-# Data and training outputs
-data/
-*.log
-*.csv
+# Whitelist ONLY public empirical paper (Markdown & compiled PDF), paper README, cited literature, root README, LICENSE, and .gitignore
+!.gitignore
+!README.md
+!LICENSE
+!paper/
+!paper/README.md
+!paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md
+!paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.pdf
+!paper/letteratura_confronto/
+!paper/letteratura_confronto/**
 
-# Virtual environments
-.venv/
-env/
-venv/
-ENV/
-
-# OS generated files
-.DS_Store
-Thumbs.db
+# Explicitly ignore private folder and all internal drafts inside paper/privato/
+paper/privato/
+paper/privato/**
