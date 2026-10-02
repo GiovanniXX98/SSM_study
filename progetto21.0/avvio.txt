@@ -1,0 +1,53 @@
+========================================================================
+    GUIDA ALL'AVVIO - PROGETTO 21.0 (Fourier Associative Matrix LLM - FAM-LLM)
+========================================================================
+
+Benvenuto nel Progetto 21.0!
+Questa architettura risolve il problema del "collo di bottiglia" dei modelli
+a vettore 1D, introducendo la Memoria Associativa Matriciale Complessa
+(K^T * V in C^{HD x HD}) combinata con le onde di frequenza e fase di Fourier.
+
+Tutti i comandi sottostanti presuppongono di posizionarsi nella cartella:
+    cd /home/giovanni/Desktop/progetti/LLM/fourier_llm/progetto21.0
+
+
+------------------------------------------------------------------------
+1. AVVIO DELL'ADDESTRAMENTO (Training Rapido o Completo)
+------------------------------------------------------------------------
+
+A) Addestramento Immediato / Test Rapido (500 step su testo reale):
+    python3 src/train.py --max_steps 500 --batch_size 4 --seq_len 256 --d_model 384 --n_layers 6
+
+B) Addestramento Alta Capacità (d_model=768, 12 layer, sequenza 512 token):
+    python3 src/train.py --max_steps 2000 --batch_size 2 --seq_len 512 --d_model 768 --n_layers 12
+
+C) Addestramento su un file di testo personalizzato:
+    python3 src/train.py --data_path /percorso/al/tuo_file.txt --max_steps 1000
+
+
+------------------------------------------------------------------------
+2. TELEMETRIA E LOGGING IN TEMPO REALE
+------------------------------------------------------------------------
+Durante il training puoi monitorare Loss, Perplexity e velocità in un altro
+terminale visualizzando il file CSV:
+
+    tail -f training_telemetry.csv
+
+
+------------------------------------------------------------------------
+3. CHAT INTERATTIVA E GENERAZIONE O(1)
+------------------------------------------------------------------------
+Per dialogare in tempo reale con il modello e verificare l'inferenza
+a velocità costante O(1) tramite la Matrix State Cache:
+
+    python3 src/chat.py --temperature 0.7 --top_k 40
+
+
+------------------------------------------------------------------------
+4. VALUTAZIONE & TEST DI MEMORIA ASSOCIATIVA
+------------------------------------------------------------------------
+Per calcolare la Perplexity ed eseguire il test di "Needle-in-a-Haystack"
+(recupero della chiave a lunga distanza nel contesto):
+
+    python3 src/evaluate.py --seq_len 512 --distance 128
+========================================================================
