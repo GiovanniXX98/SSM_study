@@ -16,10 +16,5 @@
 !grafici/
 !grafici/**
 
-# Obscure progetto21.0 completely EXCEPT paper/ and grafici/
-!progetto21.0/
-progetto21.0/*
-!progetto21.0/paper/
-!progetto21.0/paper/**
-!progetto21.0/grafici/
-!progetto21.0/grafici/**
+# Obscure progetto21.0 completely
+progetto21.0/
