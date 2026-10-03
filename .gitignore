@@ -2,7 +2,7 @@
 *
 
 # Allow directories to be scanned so paper/ can be whitelisted
-!*/
+
 
 # Whitelist ONLY public empirical paper (Markdown & compiled PDF), paper README, cited literature, root README, grafici, and .gitignore
 !.gitignore
@@ -14,11 +14,5 @@
 !paper/letteratura_confronto/
 !paper/letteratura_confronto/**
 !grafici/
-!grafici/**
 
-# Explicitly ignore private folder, internal drafts, and internal project codebase
-progetto21.0/*
-progetto21.0/**
-paper/privato/
-paper/privato/**
 
