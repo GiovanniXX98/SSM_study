@@ -11,7 +11,9 @@ Grafico a 4 pannelli ad alta fedeltà che documenta la sessione completa di adde
 3. **Learning Rate Schedule:** Profilo del Cosine Annealing con warmup lineare e decadimento controllato.
 4. **Throughput (Tokens/s):** Velocità di elaborazione media della pipeline memmap.
 
-- 🖼️ **File immagine:** [`training30M_su_openwebtext.png`](file:///home/giovanni/Desktop/progetti/LLM/SSM_study/grafici/training30M_su_openwebtext.png)
+- 🖼️ **Immagine:**
+
+![Telemetria Addestramento OpenWebText](training30M_su_openwebtext.png)
 
 ---
 
@@ -20,4 +22,7 @@ Grafico comparativo a 2 pannelli che confronta le curve asintotiche tra **FSTLLM
 1. **Impronta di Memoria Cache (MB):** Mostra la linea rigidamente piatta a **63.0 KB** di FSTLLM contro l'esplosione lineare del Transformer a **73.7 MB** a 2048 token (**abbattimento di 1170.3 volte**).
 2. **Velocità di Decodifica (token/s):** Mostra il throughput stabile di FSTLLM (**27.3 tok/s**) contro il crollo a **0.4 tok/s** del Transformer (**68 volte più veloce** a contesto esteso).
 
-- 🖼️ **File immagine:** [`benchmark_scalabilita_memoria_e_velocita_30M.png`](file:///home/giovanni/Desktop/progetti/LLM/SSM_study/grafici/benchmark_scalabilita_memoria_e_velocita_30M.png)
+- 🖼️ **Immagine:**
+
+![Scalabilità Memoria e Velocità](benchmark_scalabilita_memoria_e_velocita_30M.png)
+

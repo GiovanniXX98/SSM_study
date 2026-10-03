@@ -83,6 +83,8 @@ Al contrario, il modello **FSTLLM-30M** opera con uno stato di inferenza costant
 ### Evidenza Sperimentale sulla Memoria:
 A contesti estesi ($S=2048$), mentre la memoria occupata dal Transformer tradizionale cresce a 532 MB a causa dell'espansione del buffer KV-Cache, il modello **FSTLLM-30M** mantiene un consumo totale di RAM di processo di soli **408.07 MB**, garantendo un risparmio netto di **124.07 MB** e confermando la natura $\mathcal{O}(1)$ della propria cache dinamica.
 
+![Figura 1: Benchmark Scientifico della Memoria di Processo (OS RSS RAM) e Throughput](../grafici/benchmark_vera_memoria_processo_30M.png)
+
 ---
 
 ## 4. Valutazione Empirica della Generazione Narrative (Prompt Canonici)

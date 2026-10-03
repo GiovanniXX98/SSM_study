@@ -3,7 +3,6 @@
 [![Paper](https://img.shields.io/badge/Paper-Official_Technical_Report-blue.svg)](paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md)
 [![Dataset](https://img.shields.io/badge/Dataset-TinyStories_(Microsoft_Research)-green.svg)](https://huggingface.co/datasets/roneneldan/TinyStories)
 [![Tokenizer](https://img.shields.io/badge/Tokenizer-GPT--2_BPE_(50k)-orange.svg)](https://platform.openai.com/tokenizer)
-[![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 > **Public Research Release**: Official empirical evaluation, memory profiling, and literature benchmarks for the **FSTLLM-30M** model on Microsoft Research's TinyStories dataset.
 > 
@@ -91,6 +90,19 @@ The full technical report is available in the [`paper/`](paper/) directory:
 
 ---
 
+## 📈 Visual Benchmark Charts & Telemetry
+
+### 1. Process Memory (OS RSS RAM) & Decoding Throughput Benchmark
+![Benchmark Vera Memoria Processo](grafici/benchmark_vera_memoria_processo_30M.png)
+
+### 2. Cache Size & Speed Asymptotic Scalability ($\mathcal{O}(1)$ vs $\mathcal{O}(S)$)
+![Benchmark Scalabilità Memoria e Velocità](grafici/benchmark_scalabilita_memoria_e_velocita_30M.png)
+
+### 3. OpenWebText Training Telemetry & Loss Curves
+![Telemetria Addestramento OpenWebText](grafici/training30M_su_openwebtext.png)
+
+---
+
 ## 📚 Key Literature & Citations
 
 1. **Eldan & Li (2023)** - *TinyStories: How Small Can Language Models Be and Still Speak Coherent English?* [arXiv:2305.07759](https://arxiv.org/abs/2305.07759).
@@ -100,8 +112,3 @@ The full technical report is available in the [`paper/`](paper/) directory:
 5. **Yang et al. (2023)** - *Gated Linear Attention Transformers with Hardware-Efficient Kernels.* [arXiv:2312.06635](https://arxiv.org/abs/2312.06635).
 6. **Dao & Gu (2024)** - *Transformers are SSMs: Generalized Models and State Space Duality.* [arXiv:2405.21060](https://arxiv.org/abs/2405.21060).
 
----
-
-## ⚖️ License
-
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
