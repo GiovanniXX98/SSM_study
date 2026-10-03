@@ -17,7 +17,7 @@
 !grafici/**
 
 # Explicitly ignore private folder, internal drafts, and internal project codebase
-progetto21.0/
+progetto21.0/*
 progetto21.0/**
 paper/privato/
 paper/privato/**
