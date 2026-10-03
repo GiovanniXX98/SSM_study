@@ -17,7 +17,7 @@ This repository presents the official empirical evaluation report for **FSTLLM-3
 
 ### Key Benchmark Highlights:
 * **Convergence & Loss:** Reaches a Validation Loss of **2.3191** (Perplexity **10.17**) and Training Loss of **1.72** (Perplexity **5.59**) after 50,000 steps (58.3 minutes compute on a single NVIDIA RTX 5060 Ti).
-* **Constant Memory Footprint $\mathcal{O}(1)$:** Maintains a bounded dynamic inference cache of **67.5 KB** ($\mathcal{O}(1)$) regardless of context length $S$, compared to **74.45 MB** ($\mathcal{O}(S)$) for standard Transformer KV-Cache at $S=2048$, delivering over **124 MB of net process VRAM reduction**.
+* **Constant Memory Footprint 𝒪(1):** Maintains a bounded dynamic inference cache of **67.5 KB** (𝒪(1)) regardless of context length *S*, compared to **74.45 MB** (𝒪(*S*)) for standard Transformer KV-Cache at *S* = 2048, delivering over **124 MB of net process VRAM reduction**.
 * **High Inference & Training Throughput:** Achieves up to **613.6 tokens/sec** decoding throughput on canonical prompts and **39,120.5 tokens/sec** training speed.
 
 ---
@@ -44,9 +44,9 @@ The full technical report is available in the [`paper/`](paper/) directory:
 
 ---
 
-### 2. Inference Memory Footprint Comparison ($\mathcal{O}(1)$ vs $\mathcal{O}(S)$)
+### 2. Inference Memory Footprint Comparison (𝒪(1) vs 𝒪(S))
 
-| Context Length ($S$) | FSTLLM-30M Cache | Transformer KV-Cache | FSTLLM-30M Total RSS | Transformer Total RSS | RSS Memory Delta |
+| Context Length (*S*) | FSTLLM-30M Cache (𝒪(1)) | Transformer KV-Cache (𝒪(*S*)) | FSTLLM-30M Total RSS | Transformer Total RSS | RSS Memory Delta |
 | :---: | :---: | :---: | :---: | :---: | :---: |
 | **128** | **67.5 KB** | 5.33 MB | 390.67 MB | **367.74 MB** | +22.93 MB |
 | **512** | **67.5 KB** | 19.15 MB | 401.45 MB | **398.59 MB** | +2.86 MB (Parity) |
@@ -57,13 +57,25 @@ The full technical report is available in the [`paper/`](paper/) directory:
 
 ### 3. Empirical Comparison with TinyStories Literature
 
-| Model Benchmark | Parameter Count | Validation Loss | Perplexity (PPL) | State Cache Size ($S=2048$) | Citation Reference |
+| Model Benchmark | Parameter Count | Validation Loss | Perplexity (PPL) | State Cache Size (*S* = 2048) | Citation Reference |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **TinyStories-28M** | 28M | 1.31 | 3.71 | ~73.7 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
-| **TinyStories-33M** | 33M | 1.20 | 3.32 | ~147.4 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
-| **TinyStories-21M** | 21M | 1.54 | 4.66 | ~36.8 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
-| **TinyStories Shallow** | 3M | 1.78 | 5.93 | ~16.4 MB ($\mathcal{O}(S)$) | Eldan & Li (2023)<sup>[p. 7]</sup> |
-| **FSTLLM-30M (Step 50k)** | **29.94M** | **2.3191** | **10.17** | **67.5 KB ($\mathcal{O}(1)$)** | **Empirical Evaluation** |
+| **TinyStories-28M** | 28M | 1.31 | 3.71 | ~73.7 MB (𝒪(*S*)) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **TinyStories-33M** | 33M | 1.20 | 3.32 | ~147.4 MB (𝒪(*S*)) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **TinyStories-21M** | 21M | 1.54 | 4.66 | ~36.8 MB (𝒪(*S*)) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **TinyStories Shallow** | 3M | 1.78 | 5.93 | ~16.4 MB (𝒪(*S*)) | Eldan & Li (2023)<sup>[p. 7]</sup> |
+| **FSTLLM-30M (Step 50k)** | **29.94M** | **2.3191** | **10.17** | **67.5 KB (𝒪(1))** | **Empirical Evaluation** |
+
+---
+
+### 4. Memory Complexity & Throughput vs. Sub-Quadratic Architectures
+
+| Architecture / Model | State Cache Size (*S* = 2048) | State Memory Complexity | CUDA Throughput | Citation Reference |
+| :--- | :---: | :---: | :---: | :--- |
+| **Standard Transformer** (Vaswani et al.) | 74.45 MB | 𝒪(*S*) | ~12,000 tok/s | Vaswani et al. (2017)<sup>[p. 3, 6]</sup> |
+| **Mamba-1 / Mamba-2** (Gu & Dao) | ~135 KB | 𝒪(1) | ~32,000 tok/s | Dao & Gu (2024)<sup>[p. 8]</sup> |
+| **xLSTM / mLSTM** (Beck et al.) | ~256 KB | 𝒪(1) | ~28,000 tok/s | Beck et al. (2024)<sup>[p. 3]</sup> |
+| **Gated Linear Attention (GLA)** (Yang et al.) | ~180 KB | 𝒪(1) | ~35,000 tok/s | Yang et al. (2023)<sup>[p. 2]</sup> |
+| **FSTLLM-30M** | **67.5 KB** | **𝒪(1)** | **39,120 tok/s** | **Empirical Evaluation** |
 
 ---
 

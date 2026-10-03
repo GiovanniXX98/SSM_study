@@ -7,7 +7,7 @@ Questo archivio raccoglie il report scientifico ed empirico di valutazione del m
 ## 📄 Documento Ufficiale
 
 ### [Valutazione Empirica e Benchmark Prestazionale del Modello FSTLLM-30M sul Dataset TinyStories](paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md)
-*Report Tecnico Ufficiale: Analisi delle Prestazioni di Generazione, Efficienza della Memoria in Inferenza $\mathcal{O}(1)$, Throughput e Convergenza Sperimentale (2025-2026).*
+*Report Tecnico Ufficiale: Analisi delle Prestazioni di Generazione, Efficienza della Memoria in Inferenza 𝒪(1), Throughput e Convergenza Sperimentale (2025-2026).*
 
 - 📄 **Formato PDF Compilato:** [`paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.pdf`](paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.pdf)
 - 📝 **Formato Markdown:** [`paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md`](paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md)
