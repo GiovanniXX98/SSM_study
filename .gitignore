@@ -1,20 +1,18 @@
 # Obscure everything by default (code, scripts, models, datasets, checkpoints, logs, internal drafts)
 *
 
-# Whitelist root essentials
+# Allow directories to be scanned so paper/ can be whitelisted
+
+
+# Whitelist ONLY public empirical paper (Markdown & compiled PDF), paper README, cited literature, root README, grafici, and .gitignore
 !.gitignore
 !README.md
-
-# Whitelist root paper and grafici
 !paper/
 !paper/README.md
 !paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.md
 !paper/paper_FSTLLM_30M_TinyStories_Empirical_Evaluation.pdf
 !paper/letteratura_confronto/
 !paper/letteratura_confronto/**
-
 !grafici/
-!grafici/**
 
-# Obscure progetto21.0 completely
-progetto21.0/
+
