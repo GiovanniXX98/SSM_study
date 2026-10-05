@@ -14,6 +14,12 @@ Questo archivio raccoglie il report scientifico ed empirico di valutazione del m
 
 ---
 
+### [Report di Valutazione Empirica — Modello 1B su Codice Sorgente (10.000 Step)](EVALUATION_1B_CODE.md)
+*Valutazione delle capacità di generazione codice, benchmark di inferenza e analisi dell'addestramento su larga scala (43.8M token).*
+- 📝 **Formato Markdown GitHub:** [`EVALUATION_1B_CODE.md`](EVALUATION_1B_CODE.md)
+
+---
+
 ## 🏛️ Letteratura Scientifica di Confronto (`letteratura_confronto/`)
 
 I paper originali citati nel report sono archiviati nella sottocartella `letteratura_confronto/`:
