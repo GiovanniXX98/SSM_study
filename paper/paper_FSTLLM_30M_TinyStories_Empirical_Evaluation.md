@@ -66,7 +66,10 @@ In soli **2.5 minuti di calcolo** (2.000 step), FSTLLM-30M riduce la perplessit√
 
 Nei modelli sequenziali basati su architetture Transformer standard, la memoria richiesta per memorizzare la KV-Cache cresce linearmente con la lunghezza della sequenza di contesto $S$, secondo la formulazione analitica definita in Kwon et al. (vLLM, 2023)<sup>[Pag. 3]</sup>:
 
-$$M_{\text{KV}} = 2 \times n_{\text{layers}} \times n_{\text{heads}} \times d_{\text{head}} \times S \times 4 \text{ bytes}$$
+$$
+M_{\mathrm{KV}} = 2 \times n_{\mathrm{layers}} \times n_{\mathrm{heads}} \times d_{\mathrm{head}} \times S \times 4 \text{ bytes}
+$$
+
 
 Al contrario, il modello **FSTLLM-30M** opera con uno stato di inferenza costante $\mathcal{O}(1)$ di soli **67.5 KB**, indipendente dalla lunghezza del contesto $S$.
 
@@ -140,7 +143,10 @@ La Tabella 5 sintetizza la profilazione di memoria in inferenza e il throughput 
 | **Gated Linear Attention (GLA)** (Yang et al.) | ~180 KB | $\mathcal{O}(1)$ | ~35.000 tok/s | Yang et al. (2023)<sup>[Pag. 2]</sup> |
 | **FSTLLM-30M** | **67.5 KB** | **$\mathcal{O}(1)$** | **39.120 tok/s** | **Misurazione Sperimentale** |
 
+![Figura 2: Benchmark Certificato ed Equo FSTLLM-30M vs Mamba-1/2 e Letteratura](../grafici/confronto_mamba_vs_fstllm.png)
+
 ---
+
 
 ## 6. Conclusioni
 

@@ -1,0 +1,44 @@
+/* Formattazione CSS per Pandoc + WeasyPrint: Math & Grafici */
+
+/* Formule matematiche inline ($...$) */
+img.math {
+    height: 1.15em !important;
+    vertical-align: -0.2em !important;
+    width: auto !important;
+    max-width: 100% !important;
+}
+
+/* Formule matematiche in blocco ($$ ... $$) */
+p > img.math:only-child,
+div.math img.math {
+    height: 2.5em !important;
+    max-height: 3.5em !important;
+    vertical-align: middle !important;
+    width: auto !important;
+    display: block !important;
+    margin: 0.8em auto !important;
+}
+
+/* Immagini, schemi e grafici (non formule) */
+img:not(.math) {
+    max-width: 95% !important;
+    max-height: 7.5in !important;
+    height: auto !important;
+    display: block !important;
+    margin: 1.5em auto !important;
+    object-fit: contain !important;
+    page-break-inside: avoid !important;
+}
+
+figure {
+    text-align: center;
+    margin: 1.5em auto;
+    page-break-inside: avoid !important;
+}
+
+figcaption {
+    font-size: 0.9em;
+    color: #555;
+    margin-top: 0.5em;
+    font-style: italic;
+}
